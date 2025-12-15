@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect 4 (1P vs AI / 2P Toggle)</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#121a33;
+      --grid:#1a2550;
+      --cell:#0f1838;
+      --p1:#ff3b30;   /* Red */
+      --p2:#ffcc00;   /* Yellow */
+      --text:#e8ecff;
+      --muted:#a9b3d6;
+      --shadow: 0 12px 40px rgba(0,0,0,.35);
+      --ok:#35d07f;
+      --warn:#ff9f0a;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:
+        radial-gradient(1200px 800px at 20% 10%, #2c3aa8 0%, transparent 55%),
+        radial-gradient(1000px 700px at 85% 35%, #7a2da8 0%, transparent 60%),
+        var(--bg);
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      padding:24px;
+    }
+    .app{
+      width:min(1040px, 100%);
+      display:grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap:18px;
+    }
+    @media (max-width: 900px){
+      .app{ grid-template-columns: 1fr; }
+    }
+    .card{
+      background: rgba(18,26,51,.88);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    header{
+      padding:18px 18px 12px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), transparent);
+    }
+    header h1{
+      margin:0;
+      font-size:18px;
+      letter-spacing:.3px;
+    }
+    header p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.4;
+    }
+    .controls{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    button, select, label.switch{
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      border-radius:12px;
+      font-weight:700;
+      font-size:13px;
+    }
+    button{
+      padding:10px 12px;
+      cursor:pointer;
+      transition: transform .06s ease, background .2s ease, border-color .2s ease;
+    }
+    button:hover{ background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.22); }
+    button:active{ transform: translateY(1px); }
+
+    select{
+      padding:10px 12px;
+      cursor:pointer;
+      outline:none;
+    }
+
+    .boardWrap{
+      padding:18px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .topHint{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      color:var(--muted);
+      font-size:13px;
+      flex-wrap:wrap;
+    }
+    .turnDot{
+      width:10px; height:10px; border-radius:50%;
+      display:inline-block; margin-right:8px;
+      background: var(--p1);
+      box-shadow: 0 0 0 4px rgba(255,255,255,.06);
+      vertical-align:middle;
+    }
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.18);
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+    }
+
+    .grid{
+      width:100%;
+      aspect-ratio: 7 / 6;
+      background: linear-gradient(180deg, rgba(255,255,255,.05), transparent), var(--grid);
+      border-radius:18px;
+      padding:14px;
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap:10px;
+      position:relative;
+      user-select:none;
+    }
+    .cell{
+      background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.08), transparent 55%), var(--cell);
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.08);
+      position:relative;
+      overflow:hidden;
+      cursor:pointer;
+    }
+
+    .disc{
+      position:absolute;
+      inset:0;
+      border-radius:999px;
+      transform: translateY(-140%);
+      transition: transform 240ms cubic-bezier(.2,.9,.2,1), filter .2s ease;
+      filter: drop-shadow(0 10px 10px rgba(0,0,0,.25));
+    }
+    .disc.p1{ background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.35), transparent 55%), var(--p1); }
+    .disc.p2{ background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.35), transparent 55%), var(--p2); }
+    .disc.set{ transform: translateY(0); }
+
+    .cell.win{
+      outline: 3px solid rgba(255,255,255,.25);
+      box-shadow: 0 0 0 6px rgba(255,255,255,.06);
+    }
+
+    .side{
+      padding:18px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .status{
+      padding:14px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      line-height:1.35;
+    }
+    .status .title{
+      font-weight:900;
+      letter-spacing:.2px;
+      margin-bottom:6px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .legend{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .legend .pill{
+      padding:12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      font-weight:800;
+    }
+    .dot{ width:14px; height:14px; border-radius:50%; display:inline-block; }
+    .dot.p1{ background: var(--p1); }
+    .dot.p2{ background: var(--p2); }
+
+    .small{ color:var(--muted); font-size:12px; line-height:1.5; }
+
+    /* Toggle switch */
+    .toggleRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .switch{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .switch input{ display:none; }
+    .track{
+      width:44px; height:24px;
+      border-radius:999px;
+      background: rgba(255,255,255,.18);
+      position:relative;
+      border:1px solid rgba(255,255,255,.18);
+    }
+    .thumb{
+      width:18px; height:18px; border-radius:50%;
+      background: rgba(255,255,255,.85);
+      position:absolute; top:50%; left:3px;
+      transform: translateY(-50%);
+      transition: left .18s ease, background .18s ease;
+    }
+    .switch input:checked + .track .thumb{ left:22px; }
+    .switchText{
+      color: var(--text);
+      font-weight:900;
+    }
+    .aiNote{
+      color: var(--muted);
+      font-weight:700;
+      font-size:12px;
+    }
+
+    .footerNote{ margin-top:auto; color:var(--muted); font-size:12px; }
+    .pillRow{ display:flex; gap:10px; flex-wrap:wrap; }
+    .pillRow .badge{ border-color: rgba(255,255,255,.14); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="card">
+      <header>
+        <div>
+          <h1>Connect 4</h1>
+          <p>Click a column to drop a disc. First to connect 4 wins. Keys: <b>1–7</b> drop, <b>U</b> undo, <b>R</b> reset.</p>
+        </div>
+        <div class="controls">
+          <button id="newGameBtn">New Game</button>
+          <button id="undoBtn" title="Undo (U)">Undo</button>
+        </div>
+      </header>
+
+      <div class="boardWrap">
+        <div class="topHint">
+          <div><span class="turnDot" id="turnDot"></span><span id="turnText">Red’s turn</span></div>
+          <div class="badge" id="modeBadge">2-Player</div>
+        </div>
+        <div class="grid" id="grid" aria-label="Connect 4 board"></div>
+        <div class="small" id="aiThinking" style="display:none;">AI is thinking…</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="side">
+        <div class="status">
+          <div class="title">
+            Game Status <span class="badge" id="movesBadge">Moves: 0</span>
+          </div>
+          <div id="statusText">Red starts. Make your move.</div>
+        </div>
+
+        <div class="status">
+          <div class="title">Mode</div>
+          <div class="toggleRow">
+            <label class="switch" title="Toggle AI on/off">
+              <span class="switchText">1-Player vs AI</span>
+              <input type="checkbox" id="aiToggle">
+              <span class="track"><span class="thumb"></span></span>
+            </label>
+            <div class="aiNote" id="aiNote">AI OFF (2-Player)</div>
+          </div>
+
+          <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <span class="badge">Difficulty</span>
+            <select id="difficultySelect" disabled>
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+            <span class="badge" id="aiPlaysAs">AI plays as Yellow</span>
+          </div>
+
+          <div class="small" style="margin-top:10px;">
+            In 1-Player mode, <b>You = Red</b>, <b>AI = Yellow</b>.
+          </div>
+        </div>
+
+        <div class="legend">
+          <div class="pill">Red <span class="dot p1"></span></div>
+          <div class="pill">Yellow <span class="dot p2"></span></div>
+        </div>
+
+        <div class="status">
+          <div class="title">How to play</div>
+          <div class="small">
+            - Click anywhere in a column to drop a disc.<br/>
+            - Win by connecting 4: horizontal, vertical, or diagonal.<br/>
+            - Undo works: in AI mode it undoes <b>your move + AI move</b> when possible.
+          </div>
+        </div>
+
+        <div class="footerNote">
+          Want upgrades next? Sounds, mobile gestures, ranked mode, smarter AI, animations.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====== GAME CONSTANTS ======
+    const ROWS = 6;
+    const COLS = 7;
+    const HUMAN = 1; // Red
+    const AI = 2;    // Yellow
+
+    // ====== STATE ======
+    let board = makeEmptyBoard();
+    let currentPlayer = HUMAN;
+    let gameOver = false;
+    let moveHistory = []; // stack of {r,c,player}
+    let vsAI = false;
+    let difficulty = "medium";
+    let aiBusy = false;
+
+    // ====== DOM ======
+    const gridEl = document.getElementById('grid');
+    const statusTextEl = document.getElementById('statusText');
+    const turnTextEl = document.getElementById('turnText');
+    const turnDotEl = document.getElementById('turnDot');
+    const movesBadgeEl = document.getElementById('movesBadge');
+    const modeBadgeEl = document.getElementById('modeBadge');
+    const aiToggleEl = document.getElementById('aiToggle');
+    const aiNoteEl = document.getElementById('aiNote');
+    const difficultySelectEl = document.getElementById('difficultySelect');
+    const aiThinkingEl = document.getElementById('aiThinking');
+
+    const newGameBtn = document.getElementById('newGameBtn');
+    const undoBtn = document.getElementById('undoBtn');
+
+    // ====== INIT UI ======
+    buildGrid();
+    wireEvents();
+    newGame();
+
+    function makeEmptyBoard(){
+      return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    }
+
+    function buildGrid() {
+      gridEl.innerHTML = '';
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.r = r;
+          cell.dataset.c = c;
+
+          const disc = document.createElement('div');
+          disc.className = 'disc';
+          cell.appendChild(disc);
+
+          cell.addEventListener('click', () => handleColumnClick(c));
+          gridEl.appendChild(cell);
+        }
+      }
+    }
+
+    function wireEvents(){
+      newGameBtn.addEventListener('click', newGame);
+      undoBtn.addEventListener('click', undo);
+
+      aiToggleEl.addEventListener('change', () => {
+        vsAI = aiToggleEl.checked;
+        difficultySelectEl.disabled = !vsAI;
+        aiNoteEl.textContent = vsAI ? "AI ON (1-Player)" : "AI OFF (2-Player)";
+        modeBadgeEl.textContent = vsAI ? "1-Player vs AI" : "2-Player";
+
+        // If switching to AI and it's AI's turn, let it play.
+        if (vsAI && !gameOver && currentPlayer === AI && !aiBusy){
+          scheduleAIMove();
+        }
+
+        updateUI();
+      });
+
+      difficultySelectEl.addEventListener('change', () => {
+        difficulty = difficultySelectEl.value;
+        statusTextEl.textContent = `Difficulty set to ${difficulty.toUpperCase()}.`;
+      });
+
+      // Keyboard: 1-7 drops in that column, U undo, R reset
+      window.addEventListener('keydown', (e) => {
+        if (e.key >= '1' && e.key <= '7') {
+          handleColumnClick(Number(e.key) - 1);
+        }
+        if (e.key.toLowerCase() === 'u') undo();
+        if (e.key.toLowerCase() === 'r') newGame();
+      });
+    }
+
+    function newGame(){
+      board = makeEmptyBoard();
+      currentPlayer = HUMAN;
+      gameOver = false;
+      moveHistory = [];
+      aiBusy = false;
+      aiThinkingEl.style.display = 'none';
+      statusTextEl.textContent = "Red starts. Make your move.";
+      modeBadgeEl.textContent = vsAI ? "1-Player vs AI" : "2-Player";
+      updateUI();
+    }
+
+    function undo(){
+      if (moveHistory.length === 0 || aiBusy) return;
+
+      // In AI mode: undo two moves if possible (AI + human)
+      const undoCount = (vsAI ? Math.min(2, moveHistory.length) : 1);
+
+      for (let i = 0; i < undoCount; i++){
+        const last = moveHistory.pop();
+        if (!last) break;
+        board[last.r][last.c] = 0;
+        currentPlayer = last.player; // restore to player who made the undone move
+      }
+
+      gameOver = false;
+      statusTextEl.textContent = "Undid last move" + (vsAI ? "(s)." : ".");
+      updateUI();
+    }
+
+    function handleColumnClick(col){
+      if (gameOver || aiBusy) return;
+
+      // In AI mode, block clicks when it's AI's turn
+      if (vsAI && currentPlayer === AI) return;
+
+      const row = getDropRow(board, col);
+      if (row === -1){
+        statusTextEl.textContent = "That column is full. Pick another.";
+        return;
+      }
+
+      placeDisc(row, col, currentPlayer);
+
+      const win = checkWinFrom(board, row, col, currentPlayer);
+      if (win.won){
+        gameOver = true;
+        updateUI(win.cells);
+        statusTextEl.innerHTML = `<b>${currentPlayer === HUMAN ? "Red" : "Yellow"} wins!</b> Press New Game (or R).`;
+        turnTextEl.textContent = "Game over";
+        return;
+      }
+
+      if (isBoardFull(board)){
+        gameOver = true;
+        updateUI();
+        statusTextEl.innerHTML = `<b>Draw!</b> Board is full. Press New Game (or R).`;
+        turnTextEl.textContent = "Game over";
+        return;
+      }
+
+      // Next player
+      currentPlayer = (currentPlayer === HUMAN ? AI : HUMAN);
+      statusTextEl.textContent = "Good move. Keep going.";
+      updateUI();
+
+      if (vsAI && currentPlayer === AI && !gameOver){
+        scheduleAIMove();
+      }
+    }
+
+    function placeDisc(row, col, player){
+      board[row][col] = player;
+      moveHistory.push({ r: row, c: col, player });
+    }
+
+    function scheduleAIMove(){
+      aiBusy = true;
+      aiThinkingEl.style.display = 'block';
+      statusTextEl.textContent = "AI is thinking…";
+      updateUI();
+
+      // Small delay to feel natural
+      setTimeout(() => {
+        const col = chooseAIMove(board, difficulty);
+        const row = getDropRow(board, col);
+
+        // Safety fallback
+        if (row === -1){
+          const valid = getValidMoves(board);
+          if (valid.length === 0) {
+            aiBusy = false;
+            aiThinkingEl.style.display = 'none';
+            return;
+          }
+          const fallbackCol = valid[Math.floor(Math.random() * valid.length)];
+          const fallbackRow = getDropRow(board, fallbackCol);
+          placeDisc(fallbackRow, fallbackCol, AI);
+        } else {
+          placeDisc(row, col, AI);
+        }
+
+        const last = moveHistory[moveHistory.length - 1];
+        const win = checkWinFrom(board, last.r, last.c, AI);
+        aiBusy = false;
+        aiThinkingEl.style.display = 'none';
+
+        if (win.won){
+          gameOver = true;
+          updateUI(win.cells);
+          statusTextEl.innerHTML = `<b>AI (Yellow) wins!</b> Press New Game (or R).`;
+          turnTextEl.textContent = "Game over";
+          return;
+        }
+
+        if (isBoardFull(board)){
+          gameOver = true;
+          updateUI();
+          statusTextEl.innerHTML = `<b>Draw!</b> Board is full. Press New Game (or R).`;
+          turnTextEl.textContent = "Game over";
+          return;
+        }
+
+        currentPlayer = HUMAN;
+        statusTextEl.textContent = "Your turn.";
+        updateUI();
+      }, difficulty === "hard" ? 380 : (difficulty === "medium" ? 300 : 220));
+    }
+
+    // ====== UI UPDATE ======
+    function updateUI(winningCells = null){
+      const cells = gridEl.querySelectorAll('.cell');
+      cells.forEach(cell => {
+        cell.classList.remove('win');
+        const r = Number(cell.dataset.r);
+        const c = Number(cell.dataset.c);
+        const val = board[r][c];
+        const disc = cell.firstElementChild;
+        disc.className = 'disc';
+        if (val === HUMAN) disc.classList.add('p1', 'set');
+        if (val === AI) disc.classList.add('p2', 'set');
+      });
+
+      if (winningCells && winningCells.length){
+        winningCells.forEach(([r,c]) => {
+          const el = gridEl.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+          if (el) el.classList.add('win');
+        });
+      }
+
+      movesBadgeEl.textContent = `Moves: ${moveHistory.length}`;
+
+      // Mode badge already set on toggle; ensure consistent
+      modeBadgeEl.textContent = vsAI ? "1-Player vs AI" : "2-Player";
+
+      if (!gameOver){
+        if (currentPlayer === HUMAN){
+          turnTextEl.textContent = vsAI ? "Your turn (Red)" : "Red’s turn";
+          turnDotEl.style.background = 'var(--p1)';
+        } else {
+          turnTextEl.textContent = vsAI ? "AI’s turn (Yellow)" : "Yellow’s turn";
+          turnDotEl.style.background = 'var(--p2)';
+        }
+      }
+    }
+
+    // ====== GAME LOGIC ======
+    function getDropRow(b, col){
+      for (let r = ROWS - 1; r >= 0; r--){
+        if (b[r][col] === 0) return r;
+      }
+      return -1;
+    }
+
+    function isBoardFull(b){
+      for (let c = 0; c < COLS; c++){
+        if (b[0][c] === 0) return false;
+      }
+      return true;
+    }
+
+    function inBounds(r,c){
+      return r >= 0 && r < ROWS && c >= 0 && c < COLS;
+    }
+
+    function checkWinFrom(b, row, col, player){
+      const dirs = [
+        [0,1], [1,0], [1,1], [1,-1]
+      ];
+
+      for (const [dr, dc] of dirs){
+        const cells = [[row, col]];
+        // forward
+        let r = row + dr, c = col + dc;
+        while (inBounds(r,c) && b[r][c] === player){
+          cells.push([r,c]); r += dr; c += dc;
+        }
+        // backward
+        r = row - dr; c = col - dc;
+        while (inBounds(r,c) && b[r][c] === player){
+          cells.unshift([r,c]); r -= dr; c -= dc;
+        }
+        if (cells.length >= 4) return { won:true, cells };
+      }
+      return { won:false, cells:[] };
+    }
+
+    function getValidMoves(b){
+      const moves = [];
+      for (let c = 0; c < COLS; c++){
+        if (b[0][c] === 0) moves.push(c);
+      }
+      return moves;
+    }
+
+    // ====== AI ======
+    function chooseAIMove(b, diff){
+      // Prefer center (strong in Connect 4)
+      const validMoves = getValidMoves(b);
+      if (validMoves.length === 0) return 0;
+
+      // Easy: mostly random with a tiny center bias
+      if (diff === "easy"){
+        const biased = validMoves.slice().sort((a, z) => Math.abs(a-3) - Math.abs(z-3));
+        const top = biased.slice(0, Math.min(3, biased.length));
+        return Math.random() < 0.55 ? top[Math.floor(Math.random()*top.length)]
+                                   : validMoves[Math.floor(Math.random()*validMoves.length)];
+      }
+
+      // Medium: win if possible, block if needed, else heuristic
+      if (diff === "medium"){
+        const winMove = findImmediateWin(b, AI);
+        if (winMove !== null) return winMove;
+        const blockMove = findImmediateWin(b, HUMAN);
+        if (blockMove !== null) return blockMove;
+
+        // favor moves that create 3-in-a-row potential + center bias
+        return bestHeuristicMove(b, AI);
+      }
+
+      // Hard: shallow minimax (depth 4) with alpha-beta
+      // Still fast in browser; no installs.
+      return minimaxRoot(b, 4, AI);
+    }
+
+    function cloneBoard(b){
+      return b.map(row => row.slice());
+    }
+
+    function simulateDrop(b, col, player){
+      const nb = cloneBoard(b);
+      const r = getDropRow(nb, col);
+      if (r === -1) return null;
+      nb[r][col] = player;
+      return { board: nb, row: r, col };
+    }
+
+    function findImmediateWin(b, player){
+      const valid = getValidMoves(b);
+      for (const col of valid){
+        const sim = simulateDrop(b, col, player);
+        if (!sim) continue;
+        if (checkWinFrom(sim.board, sim.row, sim.col, player).won) return col;
+      }
+      return null;
+    }
+
+    function bestHeuristicMove(b, player){
+      const valid = getValidMoves(b);
+      let bestCol = valid[0];
+      let bestScore = -Infinity;
+
+      for (const col of valid){
+        const sim = simulateDrop(b, col, player);
+        if (!sim) continue;
+        const score = evaluateBoard(sim.board, player) + centerBias(col);
+        if (score > bestScore){
+          bestScore = score;
+          bestCol = col;
+        }
+      }
+      return bestCol;
+    }
+
+    function centerBias(col){
+      // center is 3; closer is better
+      return 6 - Math.abs(col - 3);
+    }
+
+    function minimaxRoot(b, depth, player){
+      const valid = getValidMoves(b);
+      let bestCol = valid[0];
+      let bestVal = -Infinity;
+
+      // Order moves by center for better pruning
+      const ordered = valid.slice().sort((a,z) => Math.abs(a-3) - Math.abs(z-3));
+
+      for (const col of ordered){
+        const sim = simulateDrop(b, col, player);
+        if (!sim) continue;
+
+        // If immediate win, take it
+        if (checkWinFrom(sim.board, sim.row, sim.col, player).won) return col;
+
+        const val = minimax(sim.board, depth - 1, false, -Infinity, Infinity);
+        const total = val + centerBias(col) * 0.2;
+        if (total > bestVal){
+          bestVal = total;
+          bestCol = col;
+        }
+      }
+      return bestCol;
+    }
+
+    function minimax(b, depth, maximizing, alpha, beta){
+      const valid = getValidMoves(b);
+
+      // Terminal checks
+      if (depth === 0 || valid.length === 0){
+        return evaluateBoard(b, AI) - evaluateBoard(b, HUMAN) * 0.9;
+      }
+
+      // quick win/loss detection by scanning possible immediate wins
+      const aiWin = findImmediateWin(b, AI);
+      const huWin = findImmediateWin(b, HUMAN);
+      if (aiWin !== null) return 100000;
+      if (huWin !== null) return -100000;
+
+      if (maximizing){
+        let best = -Infinity;
+        for (const col of valid.slice().sort((a,z) => Math.abs(a-3) - Math.abs(z-3))){
+          const sim = simulateDrop(b, col, AI);
+          if (!sim) continue;
+          const val = minimax(sim.board, depth - 1, false, alpha, beta);
+          best = Math.max(best, val);
+          alpha = Math.max(alpha, best);
+          if (beta <= alpha) break;
+        }
+        return best;
+      } else {
+        let best = Infinity;
+        for (const col of valid.slice().sort((a,z) => Math.abs(a-3) - Math.abs(z-3))){
+          const sim = simulateDrop(b, col, HUMAN);
+          if (!sim) continue;
+          const val = minimax(sim.board, depth - 1, true, alpha, beta);
+          best = Math.min(best, val);
+          beta = Math.min(beta, best);
+          if (beta <= alpha) break;
+        }
+        return best;
+      }
+    }
+
+    // Heuristic evaluation:
+    // Score windows of 4 for player; center preference is handled separately.
+    function evaluateBoard(b, player){
+      let score = 0;
+
+      // Center column preference
+      const centerCol = 3;
+      let centerCount = 0;
+      for (let r = 0; r < ROWS; r++){
+        if (b[r][centerCol] === player) centerCount++;
+      }
+      score += centerCount * 6;
+
+      // Score all 4-length windows
+      // horizontal
+      for (let r = 0; r < ROWS; r++){
+        for (let c = 0; c < COLS - 3; c++){
+          const window = [b[r][c], b[r][c+1], b[r][c+2], b[r][c+3]];
+          score += scoreWindow(window, player);
+        }
+      }
+      // vertical
+      for (let c = 0; c < COLS; c++){
+        for (let r = 0; r < ROWS - 3; r++){
+          const window = [b[r][c], b[r+1][c], b[r+2][c], b[r+3][c]];
+          score += scoreWindow(window, player);
+        }
+      }
+      // diag down-right
+      for (let r = 0; r < ROWS - 3; r++){
+        for (let c = 0; c < COLS - 3; c++){
+          const window = [b[r][c], b[r+1][c+1], b[r+2][c+2], b[r+3][c+3]];
+          score += scoreWindow(window, player);
+        }
+      }
+      // diag down-left
+      for (let r = 0; r < ROWS - 3; r++){
+        for (let c = 3; c < COLS; c++){
+          const window = [b[r][c], b[r+1][c-1], b[r+2][c-2], b[r+3][c-3]];
+          score += scoreWindow(window, player);
+        }
+      }
+
+      return score;
+    }
+
+    function scoreWindow(window, player){
+      const opp = (player === HUMAN ? AI : HUMAN);
+      const pCount = window.filter(v => v === player).length;
+      const oCount = window.filter(v => v === opp).length;
+      const eCount = window.filter(v => v === 0).length;
+
+      // Blocked window
+      if (pCount > 0 && oCount > 0) return 0;
+
+      // Strong rewards
+      if (pCount === 4) return 10000;
+      if (pCount === 3 && eCount === 1) return 80;
+      if (pCount === 2 && eCount === 2) return 10;
+
+      // Penalize opponent threats
+      if (oCount === 3 && eCount === 1) return -90;
+      if (oCount === 2 && eCount === 2) return -12;
+
+      return 0;
+    }
+  </script>
+</body>
+</html>
